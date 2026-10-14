@@ -1,42 +1,84 @@
-# 🧠 IOT-Based Precision Agriculture System: ANFIS & Fuzzy Control
+# 🌱 IoT Precision Agriculture — ANFIS & Fuzzy-Logic Irrigation
 
-![Status: Complete](https://img.shields.io/badge/Status-Complete-green.svg)
-[![Tech Stack](https://img.shields.io/badge/Control_System-ANFIS%20|%20Fuzzy%20Logic-red.svg)](https://en.wikipedia.org/wiki/Adaptive_neuro_fuzzy_inference_system)
-[![Tech Stack](https://img.shields.io/badge/Microcomputer-Raspberry%20Pi-red.svg)](https://www.raspberrypi.com/)
-[![Tech Stack](https://img.shields.io/badge/Cloud_DB-Firebase%20Firestore-orange.svg)](https://firebase.google.com/docs/firestore)
-[![Tech Stack](https://img.shields.io/badge/Python-GPIO%20|%20Matplotlib-blue.svg)](https://www.python.org/)
+![Raspberry Pi](https://img.shields.io/badge/Edge-Raspberry%20Pi-A22846?logo=raspberrypi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
+![Firebase](https://img.shields.io/badge/Cloud-Firestore-FFCA28?logo=firebase&logoColor=black)
+![ANFIS](https://img.shields.io/badge/Control-ANFIS%20%7C%20Fuzzy%20Logic-6A1B9A)
 
-## 1. Project Goal & Value Proposition
+A **Raspberry Pi** system that reads soil moisture, temperature and humidity, logs readings to
+**Firestore**, plots them live, and decides how much to irrigate with two models: a trained
+**ANFIS** (adaptive neuro-fuzzy inference system) and a **15-rule fuzzy-logic** controller.
 
-The objective was to develop an intelligent **Precision Agriculture System** that uses **Raspberry Pi** as an edge computer for real-time monitoring and advanced crop optimization. By employing **ANFIS (Adaptive Neuro-Fuzzy Inference System)**, the system achieves highly accurate decision-making for automated irrigation, ensuring optimal resource allocation and maximizing yield.
+## How it works
 
-## 2. Advanced Features and Methodology
+```
+DHT11 (temp/humidity) ─┐
+                       ├─► Raspberry Pi (Python) ──► Firestore `sensor_data` ──► Live chart (Graph_Plot_NEW.py)
+Soil moisture (DO pin) ┘           │
+                                   ▼
+                     Irrigation decision: ANFIS model / 15-rule fuzzy controller
+```
 
-This project goes beyond simple sensor thresholds by integrating advanced control and data systems:
+| File | What it does |
+|---|---|
+| `reshestcode.py` | Reads the DHT11 every 3 s (with retries) and saves each reading to Firestore |
+| `Graph_Plot_NEW.py` | Live chart of the last hour of readings from the same Firestore collection |
+| `MoistureSensor1.py` | Reads the soil sensor's digital output: **Wet** or **Dry** (irrigation needed) |
+| `ANFIS_MODEL_.ipynb` | Trains a Takagi–Sugeno ANFIS (hybrid learning: least squares + gradient descent) to predict litres of irrigation from moisture, temperature, humidity, rain and water level; compares it with a baseline |
+| `15_Rules_Fuzzy_logic.ipynb` | Fuzzy controller with 15 rules (scikit-fuzzy), in a 3-level and a 5-level version |
+| `Data/weather_data.csv` | Half-hourly temperature, humidity, soil moisture and rain readings (2023) |
 
-* **Adaptive Neuro-Fuzzy Inference System (ANFIS):** Developed and trained an **ANFIS model** in a Jupyter Notebook (`ANFIS_MODEL_.ipynb`) to predict the optimal irrigation amount based on inputs like **Moisture, Temperature, Humidity, and Rain**.
-* **Fuzzy Logic Control:** Implemented a supplementary **Fuzzy Logic system** (`15_Rules_Fuzzy_logic.ipynb`) using 15 predefined rules to map sensor conditions to control actions, offering robust and human-readable decision logic for irrigation management.
-* **Edge Computing & GPIO Control:** Utilized **Python with the RPi.GPIO library** (`MoistureSensor1.py`) on the Raspberry Pi to interface directly with the hardware, read soil moisture levels, and categorize them (e.g., "Very low", "Medium", "High").
-* **Cloud Data Logging:** Python scripts (`reshestcode.py`) were configured to capture real-time temperature and humidity data from the DHT11 sensor and securely log it into a **Google Firestore** database.
-* **Real-time Visualization:** A separate Python script (`Graph_Plot_NEW.py`) connects to the Firebase Realtime Database and uses **Matplotlib** to generate and update live plots of temperature and humidity data.
+## Hardware
 
-## 3. Technology Stack
+Raspberry Pi · DHT11 temperature/humidity sensor (data on GPIO 4) · soil moisture sensor module
+(DO on GPIO 21)
 
-| Category | Tools and Libraries |
-| :--- | :--- |
-| **Control System** | **ANFIS (Adaptive Neuro-Fuzzy Inference System), Fuzzy Logic** |
-| **Microcomputer** | **Raspberry Pi** |
-| **Programming** | **Python** (Pandas, NumPy, scikit-fuzzy, Adafruit_DHT, RPi.GPIO) |
-| **Cloud/Data** | **Firebase Firestore, Firebase Realtime Database** |
-| **Visualization** | **Matplotlib** (for real-time plotting) |
+## Run it
 
-## 4. Setup and Operation
+**1. Firebase:** create a project with Firestore and download a service-account key (JSON).
+Keep the key out of Git and point the scripts to it:
 
-1.  **Hardware:** Raspberry Pi, Soil Moisture Sensor, DHT11 Sensor (Temperature/Humidity).
-2.  **Cloud Setup:** Configure a project in Firebase and set up the service account credentials for Firestore access.
-3.  **Deployment:** Run the primary Python scripts (`MoistureSensor1.py` and `reshestcode.py`) on the Raspberry Pi to start reading sensors, executing control logic, and pushing data to the cloud.
-4.  **Monitoring:** Execute `Graph_Plot_NEW.py` on a local machine to view the real-time sensor data plots.
+```bash
+export FIREBASE_CREDENTIALS=/home/pi/credentials.json
+```
 
----
+**2. On the Raspberry Pi:**
 
-This is a fantastic repository, showcasing high-level skills in AI-driven control systems and cloud integration. Great job getting the code fixed and uploaded!
+```bash
+pip install firebase-admin Adafruit_DHT RPi.GPIO
+python reshestcode.py        # log temperature and humidity
+python MoistureSensor1.py    # soil moisture wet/dry
+```
+
+**3. On your computer (live chart):**
+
+```bash
+pip install firebase-admin matplotlib
+python Graph_Plot_NEW.py
+```
+
+**4. Models:**
+
+```bash
+pip install numpy pandas scikit-learn scikit-fuzzy matplotlib openpyxl jupyter
+jupyter notebook
+```
+
+The ANFIS notebook expects the training file `Data/agriculture_data_for_ann.xlsx` with columns
+`Moisture(%)`, `Temperature(C)`, `Humidity(%)`, `Rain(cm)`, `Water Level(mm)` and
+`Irrigation amount needed(l)`.
+
+## Fixes (Oct 2026)
+
+- **ANFIS was never trained:** rule parameters stayed random and only a forward pass ran. It now
+  trains with the hybrid learning rule and reports test RMSE against a baseline.
+- **Live chart showed nothing:** it read the Realtime Database while the logger writes to
+  Firestore. Both now use Firestore.
+- **Moisture sensor:** the 0/1 digital reading was mapped onto 0–500 ranges, so it could only
+  print "Very low" or "Low". It now reports Wet / Dry.
+- **Fuzzy notebook:** the 5-level version crashed (missing rule list, wrong term name) and the
+  3-level example used a rain value outside its 0–100 range. Both now run.
+- Firebase key paths moved to the `FIREBASE_CREDENTIALS` environment variable.
+
+**Tech:** Python · Raspberry Pi · RPi.GPIO · Adafruit_DHT · Firebase Firestore · scikit-learn ·
+scikit-fuzzy · NumPy · pandas · Matplotlib

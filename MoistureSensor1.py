@@ -1,50 +1,41 @@
-import RPi.GPIO as GPIO
+"""Read a soil moisture sensor's digital output (DO pin) on a Raspberry Pi.
+
+The DO pin only reports two states: above or below the threshold set with the
+potentiometer on the sensor board. It cannot give a percentage. (The earlier
+version mapped this 0/1 value onto 0-500 ranges, so it could only ever print
+"Very low" or "Low".) For real percentages, read the analog AO pin through an
+ADC such as the MCP3008.
+"""
 import time
 
-# Set GPIO mode
-GPIO.setmode(GPIO.BCM)
+import RPi.GPIO as GPIO
 
-# Define GPIO pin connected to the soil moisture sensor
-moisture_sensor_pin = 21
+MOISTURE_SENSOR_PIN = 21   # BCM numbering
+# Most modules pull DO LOW when the soil is wet (below the threshold).
+# If your readings look reversed, set this to GPIO.HIGH.
+WET_LEVEL = GPIO.LOW
+INTERVAL_SECONDS = 1
 
-def read_moisture_level():
-    # Set up the GPIO pin as input
-    GPIO.setup(moisture_sensor_pin, GPIO.IN)
 
-    # Wait for the sensor to stabilize
-    time.sleep(0.1)
+def read_moisture_state():
+    """Return "Wet" or "Dry" based on the sensor's digital output."""
+    return "Wet" if GPIO.input(MOISTURE_SENSOR_PIN) == WET_LEVEL else "Dry"
 
-    # Read the moisture level (0 for dry soil, 1 for moist soil)
-    moisture_level = GPIO.input(moisture_sensor_pin)
-    return moisture_level
 
-def categorize_moisture_level(moisture_value):
-    if moisture_value == 0:
-        return "Very low"
-    elif 0 < moisture_value <= 100:
-        return "Low"
-    elif 100 < moisture_value <= 300:
-        return "Medium"
-    elif 300 < moisture_value <= 500:
-        return "High"
-    else:
-        return "Very high"
+def main():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(MOISTURE_SENSOR_PIN, GPIO.IN)
+    time.sleep(0.1)  # let the sensor settle
+    try:
+        while True:
+            state = read_moisture_state()
+            print("Soil moisture:", state, "(irrigation needed)" if state == "Dry" else "")
+            time.sleep(INTERVAL_SECONDS)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        GPIO.cleanup()  # always release the pins, not only on Ctrl+C
 
-try:
-    while True:
-        # Read moisture level
-        moisture_level = read_moisture_level()
 
-        # Categorize moisture level
-        moisture_category = categorize_moisture_level(moisture_level)
-
-        # Print moisture level category
-        print("Moisture level:", moisture_category)
-
-        # Wait before taking another reading
-        time.sleep(1)
-
-except KeyboardInterrupt:
-    # Clean up GPIO settings on keyboard interrupt
-    GPIO.cleanup()
-
+if __name__ == "__main__":
+    main()
